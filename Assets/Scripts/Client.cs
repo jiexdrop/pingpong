@@ -12,61 +12,45 @@ public class Client : MonoBehaviour
     private bool goingRight = false;
     private bool goingLeft = false;
 
-    private bool serverGoingRight = false;
-    private bool serverGoingLeft = false;
-
     public float speed = 4f;
 
     UDPSocket c = new UDPSocket();
 
+    Vector3 pos;
 
     void Update()
     {
+
         if (goingRight)
         {
-            Vector3 pos = clientPlayer.transform.position;
+            pos = clientPlayer.transform.position;
             pos.x += Time.deltaTime * speed;
             clientPlayer.transform.position = pos;
+
+            c.ClientSend(Messages.CLIENT.ToString() + pos.ToString());
         }
 
         if (goingLeft)
         {
-            Vector3 pos = clientPlayer.transform.position;
+            pos = clientPlayer.transform.position;
             pos.x -= Time.deltaTime * speed;
             clientPlayer.transform.position = pos;
+
+            c.ClientSend(Messages.CLIENT.ToString() + pos.ToString());
         }
 
 
-        switch (c.received)
+        // Update server position
+        if (c.received.StartsWith(Messages.SERVER.ToString()))
         {
-            case "SERVER_RIGHT_PRESSED":
-                serverGoingRight = true;
-                break;
-            case "SERVER_RIGHT_RELEASED":
-                serverGoingRight = false;
-                break;
-            case "SERVER_LEFT_PRESSED":
-                serverGoingLeft = true;
-                break;
-            case "SERVER_LEFT_RELEASED":
-                serverGoingLeft = false;
-                break;
-            default:
-                break;
-        }
-
-        if (serverGoingRight)
-        {
-            Vector3 pos = serverPlayer.transform.position;
-            pos.x += Time.deltaTime * speed;
+            c.received = c.received.Replace(Messages.SERVER.ToString(), "");
+            pos = Join.StringToVector3(c.received);
             serverPlayer.transform.position = pos;
         }
-
-        if (serverGoingLeft)
-        {
-            Vector3 pos = serverPlayer.transform.position;
-            pos.x -= Time.deltaTime * speed;
-            serverPlayer.transform.position = pos;
+        if (c.received.StartsWith(Messages.BALL.ToString())){
+            c.received = c.received.Replace(Messages.BALL.ToString(), "");
+            Debug.LogError(c.received);
+            ball.transform.position = Join.StringToVector3(c.received);
         }
 
     }
@@ -75,7 +59,7 @@ public class Client : MonoBehaviour
     {
         c.Client(ip);
         //Start
-        c.ClientSend("");
+        c.ClientSend(Messages.START.ToString());
 
         Debug.LogError("CLIENT START WITH IP: " + ip);
 
@@ -84,24 +68,20 @@ public class Client : MonoBehaviour
     public void RightPressed()
     {
         goingRight = true;
-        c.ClientSend(Connection.CLIENT.ToString() + "_" + Directions.RIGHT_PRESSED.ToString());
     }
 
     public void RightReleased()
     {
         goingRight = false;
-        c.ClientSend(Connection.CLIENT.ToString() + "_" + Directions.RIGHT_RELEASED.ToString());
     }
 
     public void LeftPressed()
     {
         goingLeft = true;
-        c.ClientSend(Connection.CLIENT.ToString() + "_" + Directions.LEFT_PRESSED.ToString());
     }
 
     public void LeftReleased()
     {
         goingLeft = false;
-        c.ClientSend(Connection.CLIENT.ToString() + "_" + Directions.LEFT_RELEASED.ToString());
     }
 }
