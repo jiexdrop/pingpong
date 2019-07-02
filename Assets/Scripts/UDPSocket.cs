@@ -13,12 +13,11 @@ public class UDPSocket
     public const int PORT = 7345;
     UdpClient server;
     UdpClient client;
-    private EndPoint epFrom = new IPEndPoint(IPAddress.Any, 0);
 
     IPEndPoint epServer;
     IPEndPoint epClient;
 
-    public string received = "";
+    public Queue<string> received = new Queue<string>();
 
 
     public void Server()
@@ -66,8 +65,8 @@ public class UDPSocket
         {
             var remoteEP = new IPEndPoint(IPAddress.Any, PORT);
             var data = server.Receive(ref remoteEP); //Listen on port
-            Debug.LogError("-SERVER--RCV from " + remoteEP.ToString());
-            received = Encoding.ASCII.GetString(data);
+            //Debug.LogError("-SERVER--RCV from " + remoteEP.ToString());
+            received.Enqueue(Encoding.ASCII.GetString(data));
             epClient = remoteEP;
         }
     }
@@ -76,11 +75,9 @@ public class UDPSocket
     {
         while (true)
         {
-            var remoteEP = new IPEndPoint(IPAddress.Any, PORT);
-            var data = client.Receive(ref remoteEP); //Listen on port
-            Debug.LogError("-CLIENT--RCV from " + remoteEP.ToString());
-            received = Encoding.ASCII.GetString(data);
-            epClient = remoteEP;
+            var data = client.Receive(ref epServer); //Listen on port
+            //Debug.LogError("-CLIENT--RCV from " + remoteEP.ToString());
+            received.Enqueue(Encoding.ASCII.GetString(data));
         }
     }
 }

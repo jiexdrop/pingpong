@@ -18,6 +18,14 @@ public class Client : MonoBehaviour
 
     Vector3 pos;
 
+    Vector3 startBallPos;
+    Vector3 endBallPos;
+    float sendsPerSecond = 4f;
+
+    public float t = 0;
+
+    float lastSendTime;
+
     void Update()
     {
 
@@ -39,20 +47,39 @@ public class Client : MonoBehaviour
             c.ClientSend(Messages.CLIENT.ToString() + pos.ToString());
         }
 
-
-        // Update server position
-        if (c.received.StartsWith(Messages.SERVER.ToString()))
+        if (c.received.Count > 0)
         {
-            c.received = c.received.Replace(Messages.SERVER.ToString(), "");
-            pos = Join.StringToVector3(c.received);
-            serverPlayer.transform.position = pos;
-        }
-        if (c.received.StartsWith(Messages.BALL.ToString())){
-            c.received = c.received.Replace(Messages.BALL.ToString(), "");
-            Debug.LogError(c.received);
-            ball.transform.position = Join.StringToVector3(c.received);
-        }
+            string treatRecieved = c.received.Dequeue();
 
+            // Update server position
+            if (treatRecieved.StartsWith(Messages.SERVER.ToString()))
+            {
+                treatRecieved = treatRecieved.Replace(Messages.SERVER.ToString(), "");
+                pos = Join.StringToVector3(treatRecieved);
+                serverPlayer.transform.position = pos;
+            }
+
+
+            if (treatRecieved.StartsWith(Messages.BALL.ToString()))
+            {
+                treatRecieved = treatRecieved.Replace(Messages.BALL.ToString(), "");
+
+                lastSendTime = 0;
+                startBallPos = ball.transform.position;
+                endBallPos = Join.StringToVector3(treatRecieved);
+            }
+            Debug.Log("Last send time: " + lastSendTime);
+            lastSendTime += Time.deltaTime;
+            t += Time.deltaTime / (1f / sendsPerSecond);
+            ball.transform.position = Vector3.Lerp(startBallPos, endBallPos, t);
+
+            //if (c.received.StartsWith(Messages.RESET_BALL.ToString()))
+            //{
+            //    Debug.LogError("RESET BALL POS: " + c.received);
+            //    c.received = c.received.Replace(Messages.RESET_BALL.ToString(), "");
+            //    ball.transform.position = Join.StringToVector3(c.received);
+            //}
+        }
     }
 
     internal void StartServerWithIp(string ip)

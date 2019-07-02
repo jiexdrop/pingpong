@@ -28,8 +28,6 @@ public class Server : MonoBehaviour
     private bool goingRight = false;
     private bool goingLeft = false;
 
-    private bool clientGoingRight = false;
-    private bool clientGoingLeft = false;
 
     public float speed = 4f;
 
@@ -69,82 +67,111 @@ public class Server : MonoBehaviour
             s.ServerSend(Messages.SERVER.ToString() + pos.ToString());
         }
 
-
-        if (s.received.StartsWith(Messages.START.ToString()) || Input.GetKeyDown(KeyCode.Space))
+        if (s.received.Count > 0)
         {
-            Debug.LogError("STARTED GAME");
-            state = GameState.START;
+            string treatRecieved = s.received.Dequeue();
+
+            if (treatRecieved.StartsWith(Messages.START.ToString()) || Input.GetKeyDown(KeyCode.Space))
+            {
+                treatRecieved = treatRecieved.Replace(Messages.START.ToString(), "");
+                Debug.LogError("STARTED GAME");
+
+                StartCoroutine(SendBallPosition());
+                state = GameState.START;
+
+            }
+
+            // Update client position
+            if (treatRecieved.StartsWith(Messages.CLIENT.ToString()))
+            {
+                treatRecieved = treatRecieved.Replace(Messages.CLIENT.ToString(), "");
+                pos = Join.StringToVector3(treatRecieved);
+                clientPlayer.transform.position = pos;
+            }
+
         }
+
 
         switch (state)
+            {
+                case GameState.STOP:
+
+                    break;
+                case GameState.START:
+                    ballPos = ball.transform.position;
+                    Debug.LogError("SEND RESET: ");
+                    s.ServerSend(Messages.RESET.ToString() + ballPos.ToString());
+                    ballInitPos = new Vector3(ball.transform.position.x, ball.transform.position.y, ball.transform.position.z);
+                    ballSpeed = randomBallSpeed();
+                    state = GameState.GAME;
+
+                    break;
+                case GameState.GAME:
+                    RectTransform ballTransform = ball.GetComponent<RectTransform>();
+                    RectTransform clientTransform = clientPlayer.GetComponent<RectTransform>();
+                    RectTransform serverTransform = serverPlayer.GetComponent<RectTransform>();
+
+
+                    if (rectOverlaps(ballTransform, wallLeft))
+                    {
+                        //Debug.Log("Left");
+                        ballSpeed.x *= -1;
+                    }
+
+                    if (rectOverlaps(ballTransform, wallRight))
+                    {
+                        //Debug.Log("Right");
+                        ballSpeed.x *= -1;
+                    }
+
+                    if (rectOverlaps(ballTransform, wallTop))
+                    {
+                        //Debug.Log("Top");
+                        //ballSpeed.y *= -1;
+                        ballPos = ballInitPos;
+
+                        state = GameState.START;
+
+                    }
+
+                    if (rectOverlaps(ballTransform, wallBottom))
+                    {
+                        //Debug.Log("Bottom");
+                        //ballSpeed.y *= -1;
+                        ballPos = ballInitPos;
+
+                        state = GameState.START;
+
+                    }
+
+                    if (rectOverlaps(ballTransform, clientTransform))
+                    {
+                        ballSpeed.y *= -1;
+                    }
+
+                    if (rectOverlaps(ballTransform, serverTransform))
+                    {
+                        ballSpeed.y *= -1;
+                    }
+
+                    ballPos += ballSpeed;
+                    ball.transform.position = ballPos;
+
+
+
+                    break;
+            }
+
+    }
+
+    public IEnumerator SendBallPosition()
+    {
+        while (true)
         {
-            case GameState.START:
-                ballPos = ball.transform.position;
-                ballInitPos = new Vector3(ball.transform.position.x, ball.transform.position.y, ball.transform.position.z);
-                ballSpeed = randomBallSpeed();
-                state = GameState.GAME;
-                break;
-            case GameState.GAME:
-                RectTransform ballTransform = ball.GetComponent<RectTransform>();
-                RectTransform clientTransform = clientPlayer.GetComponent<RectTransform>();
-                RectTransform serverTransform = serverPlayer.GetComponent<RectTransform>();
-                
-
-                if(rectOverlaps(ballTransform, wallLeft))
-                {
-                    //Debug.Log("Left");
-                    ballSpeed.x *= -1;
-                }
-
-                if (rectOverlaps(ballTransform, wallRight))
-                {
-                    //Debug.Log("Right");
-                    ballSpeed.x *= -1;
-                }
-
-                if (rectOverlaps(ballTransform, wallTop))
-                {
-                    //Debug.Log("Top");
-                    //ballSpeed.y *= -1;
-                    ballPos = ballInitPos;
-                    state = GameState.START;
-                }
-
-                if (rectOverlaps(ballTransform, wallBottom))
-                {
-                    //Debug.Log("Bottom");
-                    //ballSpeed.y *= -1;
-                    ballPos = ballInitPos;
-                    state = GameState.START;
-                }
-
-                if (rectOverlaps(ballTransform, clientTransform))
-                {
-                    ballSpeed.y *= -1;
-                }
-
-                if (rectOverlaps(ballTransform, serverTransform))
-                {
-                    ballSpeed.y *= -1;
-                }
-
-                ballPos += ballSpeed;
-                ball.transform.position = ballPos;
-
-                s.ServerSend(Messages.BALL.ToString() + ballPos.ToString());
-
-                break;
+            //Debug.LogError("Sending ball position !!!!");
+            s.ServerSend(Messages.BALL.ToString() + ballPos.ToString());
+            yield return new WaitForSeconds(1 / 4); // Sends 4 times a second
         }
-
-        // Update client position
-        if (s.received.StartsWith(Messages.CLIENT.ToString()))
-        {
-            s.received = s.received.Replace(Messages.CLIENT.ToString(), "");
-            pos = Join.StringToVector3(s.received);
-            clientPlayer.transform.position = pos;
-        }
-
-
     }
 
     public Vector3 randomBallSpeed(float speed = 0.05f)
