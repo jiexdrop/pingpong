@@ -4,7 +4,7 @@ using UnityEngine;
 
 enum GameState
 {
-    STOP, 
+    STOP,
 
     START,
     GAME,
@@ -23,7 +23,7 @@ public class Server : MonoBehaviour
     public RectTransform wallBottom;
     public RectTransform wallLeft;
     public RectTransform wallRight;
-    
+
 
     private bool goingRight = false;
     private bool goingLeft = false;
@@ -31,9 +31,11 @@ public class Server : MonoBehaviour
 
     public float speed = 4f;
 
+    public float waitTime = 0f;
+
     private GameState state = GameState.STOP;
-    
-    UDPSocket s = new UDPSocket();
+
+    TCPServer s = new TCPServer();
 
     Vector3 pos;
     Vector3 ballPos;
@@ -42,7 +44,6 @@ public class Server : MonoBehaviour
 
     void Start()
     {
-
         s.Server();
         Debug.LogError("SERVER START");
     }
@@ -67,100 +68,101 @@ public class Server : MonoBehaviour
             s.ServerSend(Messages.SERVER.ToString() + pos.ToString());
         }
 
-        if (s.received.Count > 0)
+        if (s.received.StartsWith(Messages.START.ToString()) || Input.GetKeyDown(KeyCode.Space))
         {
-            string treatRecieved = s.received.Dequeue();
+            s.received = s.received.Replace(Messages.START.ToString(), "");
+            Debug.LogError("STARTED GAME");
 
-            if (treatRecieved.StartsWith(Messages.START.ToString()) || Input.GetKeyDown(KeyCode.Space))
-            {
-                treatRecieved = treatRecieved.Replace(Messages.START.ToString(), "");
-                Debug.LogError("STARTED GAME");
-
-                StartCoroutine(SendBallPosition());
-                state = GameState.START;
-
-            }
-
-            // Update client position
-            if (treatRecieved.StartsWith(Messages.CLIENT.ToString()))
-            {
-                treatRecieved = treatRecieved.Replace(Messages.CLIENT.ToString(), "");
-                pos = Join.StringToVector3(treatRecieved);
-                clientPlayer.transform.position = pos;
-            }
+            StartCoroutine(SendBallPosition());
+            state = GameState.START;
 
         }
 
+        // Update client position
+        if (s.received.StartsWith(Messages.CLIENT.ToString()))
+        {
+            s.received = s.received.Replace(Messages.CLIENT.ToString(), "");
+            pos = Join.StringToVector3(s.received);
+            clientPlayer.transform.position = pos;
+        }
+
+
+
 
         switch (state)
-            {
-                case GameState.STOP:
+        {
+            case GameState.STOP:
 
-                    break;
-                case GameState.START:
-                    ballPos = ball.transform.position;
-                    Debug.LogError("SEND RESET: ");
-                    s.ServerSend(Messages.RESET.ToString() + ballPos.ToString());
-                    ballInitPos = new Vector3(ball.transform.position.x, ball.transform.position.y, ball.transform.position.z);
-                    ballSpeed = randomBallSpeed();
+                break;
+            case GameState.START:
+                ballPos = ball.transform.position;
+                Debug.LogError("SEND RESET: ");
+                s.ServerSend(Messages.RESET.ToString() + ballPos.ToString());
+                ballInitPos = new Vector3(ball.transform.position.x, ball.transform.position.y, ball.transform.position.z);
+                ballSpeed = randomBallSpeed();
+                waitTime += Time.deltaTime;
+
+                if (waitTime > 3)
+                {
+                    waitTime = 0;
                     state = GameState.GAME;
-
-                    break;
-                case GameState.GAME:
-                    RectTransform ballTransform = ball.GetComponent<RectTransform>();
-                    RectTransform clientTransform = clientPlayer.GetComponent<RectTransform>();
-                    RectTransform serverTransform = serverPlayer.GetComponent<RectTransform>();
-
-
-                    if (rectOverlaps(ballTransform, wallLeft))
-                    {
-                        //Debug.Log("Left");
-                        ballSpeed.x *= -1;
-                    }
-
-                    if (rectOverlaps(ballTransform, wallRight))
-                    {
-                        //Debug.Log("Right");
-                        ballSpeed.x *= -1;
-                    }
-
-                    if (rectOverlaps(ballTransform, wallTop))
-                    {
-                        //Debug.Log("Top");
-                        //ballSpeed.y *= -1;
-                        ballPos = ballInitPos;
-
-                        state = GameState.START;
-
-                    }
-
-                    if (rectOverlaps(ballTransform, wallBottom))
-                    {
-                        //Debug.Log("Bottom");
-                        //ballSpeed.y *= -1;
-                        ballPos = ballInitPos;
-
-                        state = GameState.START;
-
-                    }
-
-                    if (rectOverlaps(ballTransform, clientTransform))
-                    {
-                        ballSpeed.y *= -1;
-                    }
-
-                    if (rectOverlaps(ballTransform, serverTransform))
-                    {
-                        ballSpeed.y *= -1;
-                    }
-
-                    ballPos += ballSpeed;
-                    ball.transform.position = ballPos;
+                }
+                break;
+            case GameState.GAME:
+                RectTransform ballTransform = ball.GetComponent<RectTransform>();
+                RectTransform clientTransform = clientPlayer.GetComponent<RectTransform>();
+                RectTransform serverTransform = serverPlayer.GetComponent<RectTransform>();
 
 
+                if (rectOverlaps(ballTransform, wallLeft))
+                {
+                    //Debug.Log("Left");
+                    ballSpeed.x *= -1;
+                }
 
-                    break;
-            }
+                if (rectOverlaps(ballTransform, wallRight))
+                {
+                    //Debug.Log("Right");
+                    ballSpeed.x *= -1;
+                }
+
+                if (rectOverlaps(ballTransform, wallTop))
+                {
+                    //Debug.Log("Top");
+                    //ballSpeed.y *= -1;
+                    ballPos = ballInitPos;
+
+                    state = GameState.START;
+
+                }
+
+                if (rectOverlaps(ballTransform, wallBottom))
+                {
+                    //Debug.Log("Bottom");
+                    //ballSpeed.y *= -1;
+                    ballPos = ballInitPos;
+
+                    state = GameState.START;
+                    
+                }
+
+                if (rectOverlaps(ballTransform, clientTransform))
+                {
+                    ballSpeed.y *= -1;
+                }
+
+                if (rectOverlaps(ballTransform, serverTransform))
+                {
+                    ballSpeed.y *= -1;
+                }
+
+                ballPos += ballSpeed;
+                ball.transform.position = ballPos;
+
+
+
+                break;
+        }
 
     }
 
@@ -170,14 +172,14 @@ public class Server : MonoBehaviour
         {
             //Debug.LogError("Sending ball position !!!!");
             s.ServerSend(Messages.BALL.ToString() + ballPos.ToString());
-            yield return new WaitForSeconds(1 / 4); // Sends 4 times a second
+            yield return new WaitForSeconds(1 / 8); // Sends 4 times a second
         }
     }
 
     public Vector3 randomBallSpeed(float speed = 0.05f)
     {
         int rand = Random.Range(0, 5);
-        switch(rand)
+        switch (rand)
         {
             case 0:
                 return new Vector3(0.05f, 0.05f);
@@ -203,8 +205,8 @@ public class Server : MonoBehaviour
         Vector3 posRect1 = Camera.main.WorldToScreenPoint(new Vector3(rectTrans1.position.x, rectTrans1.position.y));
         Vector3 posRect2 = Camera.main.WorldToScreenPoint(new Vector3(rectTrans2.position.x, rectTrans2.position.y));
 
-        Rect rect1 = new Rect(posRect1.x - (widthRect1 * 0.5f), Screen.height - posRect1.y - (heightRect1* 0.5f), widthRect1, heightRect1);
-        Rect rect2 = new Rect(posRect2.x - (widthRect2 * 0.5f), Screen.height - posRect2.y - (heightRect2* 0.5f), widthRect2, heightRect2);
+        Rect rect1 = new Rect(posRect1.x - (widthRect1 * 0.5f), Screen.height - posRect1.y - (heightRect1 * 0.5f), widthRect1, heightRect1);
+        Rect rect2 = new Rect(posRect2.x - (widthRect2 * 0.5f), Screen.height - posRect2.y - (heightRect2 * 0.5f), widthRect2, heightRect2);
 
         return rect1.Overlaps(rect2);
     }
