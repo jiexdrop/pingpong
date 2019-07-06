@@ -1,5 +1,7 @@
 ﻿using System;
+using System.IO;
 using System.Net.Sockets;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using UnityEngine;
@@ -11,10 +13,11 @@ public class TCPClient
 
     public const int PORT = 7345;
 
-    public string received = "";
+    public Message received = new Message();
 
-    public void Client()
+    public void Client(string ip)
     {
+
         try
         {
             clientReceiveThread = new Thread(new ThreadStart(ListenForData));
@@ -52,11 +55,14 @@ public class TCPClient
                         var incommingData = new byte[length];
                         Array.Copy(bytes, 0, incommingData, 0, length);
 
-                        string serverMessage = Encoding.ASCII.GetString(incommingData);
+                        BinaryFormatter formatter = new BinaryFormatter();
+                        MemoryStream ms = new MemoryStream(incommingData);
 
-                        Debug.Log("received message from server: " + serverMessage);
+                        Message msg = (Message)formatter.Deserialize(ms);
 
-                        received = serverMessage;
+                        Debug.Log("--> Message from SERVER: " + msg.ToString());
+
+                        received = msg;
                     }
                 }
             }
@@ -67,8 +73,12 @@ public class TCPClient
         }
     }
 
+    public bool Connected()
+    {
+        return socketConnection != null;
+    }
 
-    public void ClientSend(string message)
+    public void ClientSend(Message message)
     {
         if (socketConnection == null)
         {
@@ -82,10 +92,15 @@ public class TCPClient
             if (stream.CanWrite)
             {
                 // String converted
-                byte[] clientMessageAsByteArray = Encoding.ASCII.GetBytes(message);
+                byte[] clientMessageAsByteArray = new byte[1024];
+
+                BinaryFormatter formatter = new BinaryFormatter();
+                MemoryStream ms = new MemoryStream(clientMessageAsByteArray);
+
+                formatter.Serialize(ms, message);
 
                 stream.Write(clientMessageAsByteArray, 0, clientMessageAsByteArray.Length);
-                //Debug.Log("Client sent message");
+                //Debug.LogError("Client sent message " + message);
             }
 
         }

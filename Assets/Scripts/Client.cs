@@ -20,7 +20,13 @@ public class Client : MonoBehaviour
 
     Vector3 startBallPos;
     Vector3 endBallPos;
-    float sendsPerSecond = 8f;
+    float sendsPerSecond = 4f;
+
+    float timeStartedLerping;
+    float frequency = 1;
+    float lastTimeToReachGoal = 1;
+
+    private GameState state = GameState.STOP;
 
 
     void Update()
@@ -32,7 +38,13 @@ public class Client : MonoBehaviour
             pos.x += Time.deltaTime * speed;
             clientPlayer.transform.position = pos;
 
-            c.ClientSend(Messages.CLIENT.ToString() + pos.ToString());
+            MovementMessage mv = new MovementMessage();
+            mv.type = MessageType.CLIENT;
+            mv.x = pos.x;
+            mv.y = pos.y;
+            mv.frequency = Time.time;
+
+            c.ClientSend(mv);
         }
 
         if (goingLeft)
@@ -41,49 +53,79 @@ public class Client : MonoBehaviour
             pos.x -= Time.deltaTime * speed;
             clientPlayer.transform.position = pos;
 
-            c.ClientSend(Messages.CLIENT.ToString() + pos.ToString());
+            MovementMessage mv = new MovementMessage();
+            mv.type = MessageType.CLIENT;
+            mv.x = pos.x;
+            mv.y = pos.y;
+            mv.frequency = Time.time;
+
+            c.ClientSend(mv);
         }
 
-        string treatRecieved = c.received;
-
-        // Update server position
-        if (treatRecieved.StartsWith(Messages.SERVER.ToString()))
+        // Messages
+        switch (c.received.type)
         {
-            treatRecieved = treatRecieved.Replace(Messages.SERVER.ToString(), "");
-            pos = Join.StringToVector3(treatRecieved);
-            serverPlayer.transform.position = pos;
+            case MessageType.NONE:
+                break;
+            case MessageType.SERVER:
+                {
+                    MovementMessage mm = (MovementMessage)c.received;
+                    serverPlayer.transform.position = new Vector3(mm.x, mm.y);
+                }
+                break;
+            case MessageType.BALL:
+                {
+                    MovementMessage mm = (MovementMessage)c.received;
+                    startBallPos = ball.transform.position;
+                    endBallPos = new Vector3(mm.x, mm.y);
+                    frequency = mm.frequency;
+                    timeStartedLerping = Time.time;
+                }
+                break;
+            case MessageType.RESET:
+                {
+                    Debug.LogError("RESET BALL POS");
+                }
+                break;
+            default:
+                Debug.Log("Unhandled message type " + c.received.type);
+                break;
         }
+        c.received.OnRead(); // Always set a message to read on recieved
 
-
-        if (treatRecieved.StartsWith(Messages.BALL.ToString()))
+        // State
+        switch (state)
         {
-            treatRecieved = treatRecieved.Replace(Messages.BALL.ToString(), "");
+            case GameState.STOP:
+                if (c.Connected())
+                {
+                    state = GameState.START;
+                }
+                break;
+            case GameState.START:
+                //Start
+                c.ClientSend(new StartMessage());
 
-            startBallPos = ball.transform.position;
-            endBallPos = Join.StringToVector3(treatRecieved);
+                Debug.LogError("CLIENT SENT START");
+
+                state = GameState.GAME;
+                break;
+            case GameState.GAME:
+
+                break;
         }
 
-        ball.transform.position = Vector3.MoveTowards(ball.transform.position, endBallPos, Vector3.Distance(startBallPos, endBallPos) / (1f / sendsPerSecond) * Time.deltaTime);
 
-        if (c.received.StartsWith(Messages.RESET.ToString()))
-        {
-            Debug.LogError("RESET BALL POS: " + c.received);
-            c.received = c.received.Replace(Messages.RESET.ToString(), "");
-            ball.transform.position = Join.StringToVector3(c.received);
-            startBallPos = ball.transform.position;
-            endBallPos = ball.transform.position;
-        }
+        // Lerp
+        float lerpPercentage = (Time.time - timeStartedLerping) / frequency;
+        //Debug.Log(string.Format("lerpPercent[{0}] = (time[{1}] - tS[{2}]) / tTRG[{3}]", lerpPercentage, Time.time, timeStartedLerping, frequency));
+        ball.transform.position = Vector3.Lerp(startBallPos, endBallPos, lerpPercentage);
 
     }
 
     internal void StartServerWithIp(string ip)
     {
-        c.Client();
-        //Start
-        c.ClientSend(Messages.START.ToString());
-
-        Debug.LogError("CLIENT START WITH IP: " + ip);
-
+        c.Client(ip);
     }
 
     public void RightPressed()

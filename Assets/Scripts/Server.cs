@@ -2,14 +2,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-enum GameState
-{
-    STOP,
-
-    START,
-    GAME,
-    SCORE,
-}
 
 public class Server : MonoBehaviour
 {
@@ -42,10 +34,13 @@ public class Server : MonoBehaviour
     Vector3 ballInitPos;
     Vector3 ballSpeed;
 
+    private IEnumerator sendBallCoroutine;
+
     void Start()
     {
         s.Server();
         Debug.LogError("SERVER START");
+        sendBallCoroutine = SendBallPosition();
     }
 
     void Update()
@@ -56,7 +51,13 @@ public class Server : MonoBehaviour
             pos.x += Time.deltaTime * speed;
             serverPlayer.transform.position = pos;
 
-            s.ServerSend(Messages.SERVER.ToString() + pos.ToString());
+            MovementMessage mv = new MovementMessage();
+            mv.type = MessageType.SERVER;
+            mv.x = pos.x;
+            mv.y = pos.y;
+            mv.frequency = Time.time;
+
+            s.ServerSend(mv);
         }
 
         if (goingLeft)
@@ -65,30 +66,47 @@ public class Server : MonoBehaviour
             pos.x -= Time.deltaTime * speed;
             serverPlayer.transform.position = pos;
 
-            s.ServerSend(Messages.SERVER.ToString() + pos.ToString());
+            MovementMessage mv = new MovementMessage();
+            mv.type = MessageType.SERVER;
+            mv.x = pos.x;
+            mv.y = pos.y;
+            mv.frequency = Time.time;
+
+            s.ServerSend(mv);
         }
 
-        if (s.received.StartsWith(Messages.START.ToString()) || Input.GetKeyDown(KeyCode.Space))
+        if (Input.GetKeyDown(KeyCode.Space))
         {
-            s.received = s.received.Replace(Messages.START.ToString(), "");
-            Debug.LogError("STARTED GAME");
+            Debug.LogError("START GAME");
 
-            StartCoroutine(SendBallPosition());
             state = GameState.START;
-
         }
 
-        // Update client position
-        if (s.received.StartsWith(Messages.CLIENT.ToString()))
+        // Messages
+        switch (s.received.type)
         {
-            s.received = s.received.Replace(Messages.CLIENT.ToString(), "");
-            pos = Join.StringToVector3(s.received);
-            clientPlayer.transform.position = pos;
+            case MessageType.NONE:
+                break;
+            case MessageType.START:
+
+                Debug.LogError("START GAME");
+
+                state = GameState.START;
+
+                break;
+            case MessageType.CLIENT:
+                MovementMessage mm = (MovementMessage)s.received;
+                clientPlayer.transform.position = new Vector3(mm.x, mm.y);
+                break;
+
+            default:
+                Debug.Log("Unhandled type " + s.received.type.ToString());
+                break;
         }
+        s.received.OnRead();  // Always set a message to read on recieved
 
 
-
-
+        // State
         switch (state)
         {
             case GameState.STOP:
@@ -96,8 +114,7 @@ public class Server : MonoBehaviour
                 break;
             case GameState.START:
                 ballPos = ball.transform.position;
-                Debug.LogError("SEND RESET: ");
-                s.ServerSend(Messages.RESET.ToString() + ballPos.ToString());
+
                 ballInitPos = new Vector3(ball.transform.position.x, ball.transform.position.y, ball.transform.position.z);
                 ballSpeed = randomBallSpeed();
                 waitTime += Time.deltaTime;
@@ -105,6 +122,8 @@ public class Server : MonoBehaviour
                 if (waitTime > 3)
                 {
                     waitTime = 0;
+                    StopCoroutine(sendBallCoroutine); 
+                    StartCoroutine(sendBallCoroutine);
                     state = GameState.GAME;
                 }
                 break;
@@ -131,7 +150,8 @@ public class Server : MonoBehaviour
                     //Debug.Log("Top");
                     //ballSpeed.y *= -1;
                     ballPos = ballInitPos;
-
+                    Debug.LogError("SEND RESET");
+                    s.ServerSend(new ResetMessage());
                     state = GameState.START;
 
                 }
@@ -141,9 +161,10 @@ public class Server : MonoBehaviour
                     //Debug.Log("Bottom");
                     //ballSpeed.y *= -1;
                     ballPos = ballInitPos;
-
+                    Debug.LogError("SEND RESET");
+                    s.ServerSend(new ResetMessage());
                     state = GameState.START;
-                    
+
                 }
 
                 if (rectOverlaps(ballTransform, clientTransform))
@@ -160,7 +181,6 @@ public class Server : MonoBehaviour
                 ball.transform.position = ballPos;
 
 
-
                 break;
         }
 
@@ -170,9 +190,18 @@ public class Server : MonoBehaviour
     {
         while (true)
         {
-            //Debug.LogError("Sending ball position !!!!");
-            s.ServerSend(Messages.BALL.ToString() + ballPos.ToString());
-            yield return new WaitForSeconds(1 / 8); // Sends 4 times a second
+            float frequency = 1.0f / 6.0f; // Sends 6 times a second
+
+            yield return new WaitForSeconds(frequency); 
+
+            Debug.LogError("Sending ball position !!!");
+            MovementMessage ballMovement = new MovementMessage();
+            ballMovement.type = MessageType.BALL;
+            ballMovement.x = ballPos.x;
+            ballMovement.y = ballPos.y;
+            ballMovement.frequency = frequency;
+
+            s.ServerSend(ballMovement);
         }
     }
 

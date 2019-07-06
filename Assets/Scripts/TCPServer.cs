@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading;
 using UnityEngine;
@@ -18,7 +20,7 @@ public class TCPServer
 
     public const int PORT = 7345;
 
-    public string received = "";
+    public Message received = new Message();
 
 
     // Update is called once per frame
@@ -59,11 +61,14 @@ public class TCPServer
                             var incommingData = new byte[length];
                             Array.Copy(bytes, 0, incommingData, 0, length);
 
-                            string clientMessage = Encoding.ASCII.GetString(incommingData);
+                            BinaryFormatter formatter = new BinaryFormatter();
+                            MemoryStream ms = new MemoryStream(incommingData);
 
-                            Debug.Log("received message from client: " + clientMessage);
+                            Message msg = (Message)formatter.Deserialize(ms);
 
-                            received = clientMessage;
+                            Debug.Log("--> Message from CLIENT: " + msg.ToString());
+
+                            received = msg;
                         }
                     }
                 }
@@ -76,7 +81,7 @@ public class TCPServer
         }
     }
 
-    public void ServerSend(string message)
+    public void ServerSend(Message message)
     {
         if (connectedTcpClient == null)
         {
@@ -89,10 +94,15 @@ public class TCPServer
             NetworkStream stream = connectedTcpClient.GetStream();
             if (stream.CanWrite)
             {
+                
+                byte[] serverMessageAsByteArray = new byte[1024];
 
-                // Convert string message to byte array.                 
-                byte[] serverMessageAsByteArray = Encoding.ASCII.GetBytes(message);
-                // Write byte array to socketConnection stream.               
+                // Serialize message
+                BinaryFormatter formatter = new BinaryFormatter();
+                MemoryStream ms = new MemoryStream(serverMessageAsByteArray);
+
+                formatter.Serialize(ms, message);
+
                 stream.Write(serverMessageAsByteArray, 0, serverMessageAsByteArray.Length);
             }
         }
